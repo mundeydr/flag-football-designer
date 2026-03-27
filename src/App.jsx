@@ -13,8 +13,10 @@ export default function App() {
   const [players, setPlayers] = useState(INITIAL_PLAYERS);
   const [routes, setRoutes] = useState([]);
   const [currentRoute, setCurrentRoute] = useState(null);
+  const [ballCarrierId, setBallCarrierId] = useState(null);
+  const [fakeCarrierIds, setFakeCarrierIds] = useState([]); // Array to allow multiple fakes
   
-  // App Modes: 'move', 'draw_solid', 'draw_dotted'
+  // App Modes: 'move', 'draw_solid', 'draw_dotted', 'ball', 'fake'
   const [mode, setMode] = useState('move');
   
   // Which player's color is currently selected for drawing routes
@@ -49,6 +51,30 @@ export default function App() {
         if (dx * dx + dy * dy <= 2500) { // 50^2
           setDraggingPlayerId(id);
           setActiveColorId(id); // Auto-select this player's color for future drawing!
+          return;
+        }
+      }
+    } else if (mode === 'ball') {
+      // Assign the football to the clicked player (Toggle on/off)
+      for (const [id, p] of Object.entries(players)) {
+        const dx = p.x - coords.x;
+        const dy = p.y - coords.y;
+        if (dx * dx + dy * dy <= 2500) { // 50^2
+          setBallCarrierId(prev => prev === id ? null : id);
+          setFakeCarrierIds(prev => prev.filter(fId => fId !== id)); // Remove fake if getting real ball
+          return;
+        }
+      }
+    } else if (mode === 'fake') {
+      // Assign the fake football to the clicked player (Toggle on/off)
+      for (const [id, p] of Object.entries(players)) {
+        const dx = p.x - coords.x;
+        const dy = p.y - coords.y;
+        if (dx * dx + dy * dy <= 2500) { // 50^2
+          setFakeCarrierIds(prev => 
+            prev.includes(id) ? prev.filter(fId => fId !== id) : [...prev, id]
+          );
+          if (ballCarrierId === id) setBallCarrierId(null); // Remove real ball if getting fake
           return;
         }
       }
@@ -128,6 +154,40 @@ export default function App() {
   const resetPlay = () => {
     setPlayers(INITIAL_PLAYERS);
     setRoutes([]);
+    setBallCarrierId(null);
+    setFakeCarrierIds([]);
+  };
+
+  // Helper to render the little football icon on the ball carrier
+  const renderFootball = (p) => {
+    if (ballCarrierId !== p.id) return null;
+    return (
+      <g transform={`translate(${p.x + 18}, ${p.y - 18}) rotate(-45)`}>
+        {/* Football Body */}
+        <ellipse cx="0" cy="0" rx="10" ry="6" fill="#8B4513" stroke="white" strokeWidth="1.5" />
+        {/* Laces */}
+        <line x1="-4" y1="0" x2="4" y2="0" stroke="white" strokeWidth="1.5" />
+        <line x1="-2" y1="-2" x2="-2" y2="2" stroke="white" strokeWidth="1" />
+        <line x1="0" y1="-2" x2="0" y2="2" stroke="white" strokeWidth="1" />
+        <line x1="2" y1="-2" x2="2" y2="2" stroke="white" strokeWidth="1" />
+      </g>
+    );
+  };
+
+  // Helper to render the hollow fake football icon
+  const renderFakeFootball = (p) => {
+    if (!fakeCarrierIds.includes(p.id)) return null;
+    return (
+      <g transform={`translate(${p.x + 18}, ${p.y - 18}) rotate(-45)`}>
+        {/* Hollow Football Body */}
+        <ellipse cx="0" cy="0" rx="10" ry="6" fill="none" stroke="black" strokeWidth="2" />
+        {/* Laces */}
+        <line x1="-4" y1="0" x2="4" y2="0" stroke="black" strokeWidth="1.5" />
+        <line x1="-2" y1="-2" x2="-2" y2="2" stroke="black" strokeWidth="1" />
+        <line x1="0" y1="-2" x2="0" y2="2" stroke="black" strokeWidth="1" />
+        <line x1="2" y1="-2" x2="2" y2="2" stroke="black" strokeWidth="1" />
+      </g>
+    );
   };
 
   // Render a player based on their shape property
@@ -143,6 +203,8 @@ export default function App() {
           <text x={p.x} y={p.y} fill="white" fontSize="16" fontWeight="bold" textAnchor="middle" dominantBaseline="central">
             {p.label}
           </text>
+          {renderFootball(p)}
+          {renderFakeFootball(p)}
         </g>
       );
     }
@@ -156,6 +218,8 @@ export default function App() {
           <text x={p.x} y={p.y + 4} fill="white" fontSize="14" fontWeight="bold" textAnchor="middle" dominantBaseline="central">
             {p.label}
           </text>
+          {renderFootball(p)}
+          {renderFakeFootball(p)}
         </g>
       );
     }
@@ -166,6 +230,8 @@ export default function App() {
         <text x={p.x} y={p.y} fill="white" fontSize="16" fontWeight="bold" textAnchor="middle" dominantBaseline="central">
           {p.label}
         </text>
+        {renderFootball(p)}
+        {renderFakeFootball(p)}
       </g>
     );
   };
@@ -200,22 +266,38 @@ export default function App() {
             >
               <PenTool size={18} /> Dotted
             </button>
-          </div>
-        </div>
-
-        {/* Color/Player Selection (Only visible when drawing) */}
-        <div className={`flex items-center gap-3 transition-opacity duration-300 ${mode.startsWith('draw') ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-          <span className="text-sm font-medium text-slate-600">Drawing Color:</span>
-          <div className="flex gap-2">
-            {Object.values(players).map(p => (
-              <button
-                key={`color-${p.id}`}
-                onClick={() => setActiveColorId(p.id)}
-                className={`w-8 h-8 rounded-full border-2 transition-transform ${activeColorId === p.id ? 'scale-110 border-slate-800 shadow-md' : 'border-transparent hover:scale-105'}`}
-                style={{ backgroundColor: p.color }}
-                title={`Select ${p.label} color`}
-              />
-            ))}
+            <button
+              onClick={() => setMode('ball')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${mode === 'ball' ? 'bg-white shadow-sm text-slate-900 font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
+              title="Assign Ball"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <g transform="rotate(-45 12 12)">
+                  <ellipse cx="12" cy="12" rx="10" ry="6" fill="currentColor" />
+                  <line x1="8" y1="12" x2="16" y2="12" stroke="white" strokeWidth="1.5" />
+                  <line x1="10" y1="10" x2="10" y2="14" stroke="white" strokeWidth="1" />
+                  <line x1="12" y1="10" x2="12" y2="14" stroke="white" strokeWidth="1" />
+                  <line x1="14" y1="10" x2="14" y2="14" stroke="white" strokeWidth="1" />
+                </g>
+              </svg>
+              Ball
+            </button>
+            <button
+              onClick={() => setMode('fake')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${mode === 'fake' ? 'bg-white shadow-sm text-slate-900 font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
+              title="Assign Fake"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <g transform="rotate(-45 12 12)">
+                  <ellipse cx="12" cy="12" rx="10" ry="6" fill="none" stroke="currentColor" strokeWidth="2" />
+                  <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="10" y1="10" x2="10" y2="14" stroke="currentColor" strokeWidth="1" />
+                  <line x1="12" y1="10" x2="12" y2="14" stroke="currentColor" strokeWidth="1" />
+                  <line x1="14" y1="10" x2="14" y2="14" stroke="currentColor" strokeWidth="1" />
+                </g>
+              </svg>
+              Fake
+            </button>
           </div>
         </div>
 
@@ -245,7 +327,7 @@ export default function App() {
           <svg
             ref={svgRef}
             viewBox="0 0 600 600"
-            className={`w-full h-full touch-none ${mode === 'move' ? 'cursor-move' : 'cursor-crosshair'}`}
+            className={`w-full h-full touch-none ${mode === 'move' ? 'cursor-move' : (mode === 'ball' || mode === 'fake') ? 'cursor-pointer' : 'cursor-crosshair'}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
