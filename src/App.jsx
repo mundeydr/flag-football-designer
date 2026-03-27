@@ -3,10 +3,10 @@ import { MousePointer2, PenLine, PenTool, Trash2, RotateCcw } from 'lucide-react
 
 const INITIAL_PLAYERS = {
   center: { id: 'center', x: 300, y: 400, color: 'black', shape: 'square', label: 'C' },
-  qb: { id: 'qb', x: 300, y: 470, color: '#f97316', shape: 'triangle', label: 'QB' }, // Orange
-  p3: { id: 'p3', x: 100, y: 400, color: '#3b82f6', shape: 'circle', label: 'WR' },   // Blue
-  p4: { id: 'p4', x: 500, y: 400, color: '#22c55e', shape: 'circle', label: 'WR' },   // Green
-  p5: { id: 'p5', x: 200, y: 400, color: '#ef4444', shape: 'circle', label: 'RB' },   // Red
+  qb: { id: 'qb', x: 300, y: 470, color: '#f97316', shape: 'triangle', label: 'Q' }, // Orange
+  p3: { id: 'p3', x: 100, y: 400, color: '#3b82f6', shape: 'circle', label: 'X' },   // Blue
+  p4: { id: 'p4', x: 500, y: 400, color: '#22c55e', shape: 'circle', label: 'Y' },   // Green
+  p5: { id: 'p5', x: 200, y: 400, color: '#ef4444', shape: 'circle', label: 'Z' },   // Red
 };
 
 export default function App() {
