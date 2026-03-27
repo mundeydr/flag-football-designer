@@ -23,16 +23,17 @@ export default function App() {
   const [draggingPlayerId, setDraggingPlayerId] = useState(null);
   const svgRef = useRef(null);
 
-  // Helper to convert screen coordinates to SVG viewBox coordinates
+  // Helper to convert screen coordinates to SVG viewBox coordinates (more robust version)
   const getMouseCoords = useCallback((e) => {
     if (!svgRef.current) return { x: 0, y: 0 };
     const svg = svgRef.current;
+    let point = svg.createSVGPoint();
+    point.x = e.clientX;
+    point.y = e.clientY;
     const CTM = svg.getScreenCTM();
     if (!CTM) return { x: 0, y: 0 };
-    return {
-      x: (e.clientX - CTM.e) / CTM.a,
-      y: (e.clientY - CTM.f) / CTM.d
-    };
+    point = point.matrixTransform(CTM.inverse());
+    return { x: point.x, y: point.y };
   }, []);
 
   const handlePointerDown = (e) => {
@@ -41,12 +42,13 @@ export default function App() {
     const coords = getMouseCoords(e);
 
     if (mode === 'move') {
-      // Find if we clicked on a player (within a 30 unit radius)
+      // Find if we clicked on or near a player (within a 50 unit radius for easier grabbing)
       for (const [id, p] of Object.entries(players)) {
         const dx = p.x - coords.x;
         const dy = p.y - coords.y;
-        if (dx * dx + dy * dy <= 900) { // 30^2
+        if (dx * dx + dy * dy <= 2500) { // 50^2
           setDraggingPlayerId(id);
+          setActiveColorId(id); // Auto-select this player's color for future drawing!
           return;
         }
       }
@@ -54,19 +56,27 @@ export default function App() {
       let routeColor = players[activeColorId].color;
       let routePlayerId = activeColorId;
 
-      // Auto-detect if drawing started on a player to select their color
+      // Find the absolute closest player to where the click started
+      let minDistance = Infinity;
+      let closestPlayerId = activeColorId;
+
       for (const [id, p] of Object.entries(players)) {
         const dx = p.x - coords.x;
         const dy = p.y - coords.y;
-        if (dx * dx + dy * dy <= 900) { // 30^2
-          routeColor = p.color;
-          routePlayerId = id;
-          break;
+        const distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared < minDistance) {
+          minDistance = distanceSquared;
+          closestPlayerId = id;
         }
       }
 
-      // Update the selected color in the toolbar automatically
-      setActiveColorId(routePlayerId);
+      // If the click is reasonably close to a player (within 100 units), snap to their color.
+      // This allows you to start drawing from right behind or next to a shape without missing.
+      if (minDistance <= 10000) { // 100^2
+        routeColor = players[closestPlayerId].color;
+        routePlayerId = closestPlayerId;
+        setActiveColorId(closestPlayerId);
+      }
 
       // Start a new route
       setCurrentRoute({
@@ -124,11 +134,13 @@ export default function App() {
   const renderPlayer = (p) => {
     const size = 20; // Base size for calculations
     
+    // Using pointerEvents: 'none' on the group ensures the SVG background perfectly catches 
+    // the mouse clicks, preventing the shapes from interfering with the drawing/dragging logic.
     if (p.shape === 'square') {
       return (
-        <g key={p.id}>
+        <g key={p.id} style={{ pointerEvents: 'none' }}>
           <rect x={p.x - size} y={p.y - size} width={size * 2} height={size * 2} fill={p.color} stroke="white" strokeWidth="2" />
-          <text x={p.x} y={p.y} fill="white" fontSize="16" fontWeight="bold" textAnchor="middle" dominantBaseline="central" style={{ pointerEvents: 'none' }}>
+          <text x={p.x} y={p.y} fill="white" fontSize="16" fontWeight="bold" textAnchor="middle" dominantBaseline="central">
             {p.label}
           </text>
         </g>
@@ -139,9 +151,9 @@ export default function App() {
       // Pointing upwards
       const points = `${p.x},${p.y - size - 4} ${p.x - size},${p.y + size - 2} ${p.x + size},${p.y + size - 2}`;
       return (
-        <g key={p.id}>
+        <g key={p.id} style={{ pointerEvents: 'none' }}>
           <polygon points={points} fill={p.color} stroke="white" strokeWidth="2" />
-          <text x={p.x} y={p.y + 4} fill="white" fontSize="14" fontWeight="bold" textAnchor="middle" dominantBaseline="central" style={{ pointerEvents: 'none' }}>
+          <text x={p.x} y={p.y + 4} fill="white" fontSize="14" fontWeight="bold" textAnchor="middle" dominantBaseline="central">
             {p.label}
           </text>
         </g>
@@ -149,9 +161,9 @@ export default function App() {
     }
     
     return (
-      <g key={p.id}>
+      <g key={p.id} style={{ pointerEvents: 'none' }}>
         <circle cx={p.x} cy={p.y} r={size} fill={p.color} stroke="white" strokeWidth="2" />
-        <text x={p.x} y={p.y} fill="white" fontSize="16" fontWeight="bold" textAnchor="middle" dominantBaseline="central" style={{ pointerEvents: 'none' }}>
+        <text x={p.x} y={p.y} fill="white" fontSize="16" fontWeight="bold" textAnchor="middle" dominantBaseline="central">
           {p.label}
         </text>
       </g>
@@ -271,7 +283,42 @@ export default function App() {
             {/* Line of Scrimmage */}
             <line x1="0" y1="400" x2="600" y2="400" stroke="#fde047" strokeWidth="4" />
             <text x="10" y="390" fill="#fde047" fontSize="16" fontWeight="bold" className="drop-shadow-md">
-              LINE OF SCRIMMAGE
             </text>
 
-            {
+            {/* --- Render Saved Routes --- */}
+            {routes.map(route => (
+              <polyline
+                key={route.id}
+                points={route.points.map(p => `${p.x},${p.y}`).join(' ')}
+                fill="none"
+                stroke={route.color}
+                strokeWidth="4"
+                strokeDasharray={route.type === 'dotted' ? '8,8' : 'none'}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                markerEnd={`url(#arrow-${route.color.replace('#', '')})`}
+              />
+            ))}
+
+            {/* --- Render Current Route (Being drawn) --- */}
+            {currentRoute && (
+              <polyline
+                points={currentRoute.points.map(p => `${p.x},${p.y}`).join(' ')}
+                fill="none"
+                stroke={currentRoute.color}
+                strokeWidth="4"
+                strokeDasharray={currentRoute.type === 'dotted' ? '8,8' : 'none'}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                markerEnd={`url(#arrow-${currentRoute.color.replace('#', '')})`}
+              />
+            )}
+
+            {/* --- Render Players --- */}
+            {Object.values(players).map(renderPlayer)}
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+}
