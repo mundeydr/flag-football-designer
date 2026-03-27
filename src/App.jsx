@@ -238,11 +238,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+      {/* Page Title Header */}
+      <div className="w-full text-center py-6 px-4">
+        <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Flag Football Play Builder</h1>
+      </div>
+
       {/* Top Toolbar */}
       <div className="bg-white shadow-md p-4 flex flex-wrap items-center justify-between gap-4 z-10">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-slate-800 mr-4">Play Designer</h1>
-          
           {/* Mode Controls */}
           <div className="flex bg-slate-100 rounded-lg p-1 border border-slate-200">
             <button
