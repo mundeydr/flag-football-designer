@@ -51,10 +51,27 @@ export default function App() {
         }
       }
     } else if (mode.startsWith('draw')) {
+      let routeColor = players[activeColorId].color;
+      let routePlayerId = activeColorId;
+
+      // Auto-detect if drawing started on a player to select their color
+      for (const [id, p] of Object.entries(players)) {
+        const dx = p.x - coords.x;
+        const dy = p.y - coords.y;
+        if (dx * dx + dy * dy <= 900) { // 30^2
+          routeColor = p.color;
+          routePlayerId = id;
+          break;
+        }
+      }
+
+      // Update the selected color in the toolbar automatically
+      setActiveColorId(routePlayerId);
+
       // Start a new route
       setCurrentRoute({
         id: Date.now().toString(),
-        color: players[activeColorId].color,
+        color: routeColor,
         type: mode === 'draw_solid' ? 'solid' : 'dotted',
         points: [coords]
       });
@@ -254,42 +271,7 @@ export default function App() {
             {/* Line of Scrimmage */}
             <line x1="0" y1="400" x2="600" y2="400" stroke="#fde047" strokeWidth="4" />
             <text x="10" y="390" fill="#fde047" fontSize="16" fontWeight="bold" className="drop-shadow-md">
+              LINE OF SCRIMMAGE
             </text>
 
-            {/* --- Render Saved Routes --- */}
-            {routes.map(route => (
-              <polyline
-                key={route.id}
-                points={route.points.map(p => `${p.x},${p.y}`).join(' ')}
-                fill="none"
-                stroke={route.color}
-                strokeWidth="4"
-                strokeDasharray={route.type === 'dotted' ? '8,8' : 'none'}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                markerEnd={`url(#arrow-${route.color.replace('#', '')})`}
-              />
-            ))}
-
-            {/* --- Render Current Route (Being drawn) --- */}
-            {currentRoute && (
-              <polyline
-                points={currentRoute.points.map(p => `${p.x},${p.y}`).join(' ')}
-                fill="none"
-                stroke={currentRoute.color}
-                strokeWidth="4"
-                strokeDasharray={currentRoute.type === 'dotted' ? '8,8' : 'none'}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                markerEnd={`url(#arrow-${currentRoute.color.replace('#', '')})`}
-              />
-            )}
-
-            {/* --- Render Players --- */}
-            {Object.values(players).map(renderPlayer)}
-          </svg>
-        </div>
-      </div>
-    </div>
-  );
-}
+            {
