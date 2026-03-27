@@ -111,6 +111,9 @@ export default function App() {
       return (
         <g key={p.id}>
           <rect x={p.x - size} y={p.y - size} width={size * 2} height={size * 2} fill={p.color} stroke="white" strokeWidth="2" />
+          <text x={p.x} y={p.y} fill="white" fontSize="16" fontWeight="bold" textAnchor="middle" dominantBaseline="central" style={{ pointerEvents: 'none' }}>
+            {p.label}
+          </text>
         </g>
       );
     }
@@ -121,6 +124,9 @@ export default function App() {
       return (
         <g key={p.id}>
           <polygon points={points} fill={p.color} stroke="white" strokeWidth="2" />
+          <text x={p.x} y={p.y + 4} fill="white" fontSize="14" fontWeight="bold" textAnchor="middle" dominantBaseline="central" style={{ pointerEvents: 'none' }}>
+            {p.label}
+          </text>
         </g>
       );
     }
@@ -128,6 +134,9 @@ export default function App() {
     return (
       <g key={p.id}>
         <circle cx={p.x} cy={p.y} r={size} fill={p.color} stroke="white" strokeWidth="2" />
+        <text x={p.x} y={p.y} fill="white" fontSize="16" fontWeight="bold" textAnchor="middle" dominantBaseline="central" style={{ pointerEvents: 'none' }}>
+          {p.label}
+        </text>
       </g>
     );
   };
