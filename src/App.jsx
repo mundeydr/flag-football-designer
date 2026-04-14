@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { MousePointer2, PenLine, PenTool, Trash2, RotateCcw } from 'lucide-react';
+import { MousePointer2, PenLine, PenTool, Trash2, RotateCcw, Undo } from 'lucide-react';
 
 const INITIAL_PLAYERS = {
   center: { id: 'center', x: 300, y: 400, color: 'black', shape: 'square', label: 'C' },
@@ -16,6 +16,10 @@ export default function App() {
   const [ballCarrierId, setBallCarrierId] = useState(null);
   const [fakeCarrierIds, setFakeCarrierIds] = useState([]); // Array to allow multiple fakes
   
+  // Undo History state
+  const [history, setHistory] = useState([]);
+  const [dragStartState, setDragStartState] = useState(null);
+  
   // App Modes: 'move', 'draw_solid', 'draw_dotted', 'ball', 'fake'
   const [mode, setMode] = useState('move');
   
@@ -25,7 +29,7 @@ export default function App() {
   const [draggingPlayerId, setDraggingPlayerId] = useState(null);
   const svgRef = useRef(null);
 
-  // Helper to convert screen coordinates to SVG viewBox coordinates (more robust version)
+  // Helper to convert screen coordinates to SVG viewBox coordinates
   const getMouseCoords = useCallback((e) => {
     if (!svgRef.current) return { x: 0, y: 0 };
     const svg = svgRef.current;
@@ -39,42 +43,44 @@ export default function App() {
   }, []);
 
   const handlePointerDown = (e) => {
-    // Ensure all pointer events go to the SVG during dragging/drawing
     e.target.setPointerCapture(e.pointerId);
     const coords = getMouseCoords(e);
 
     if (mode === 'move') {
-      // Find if we clicked on or near a player (within a 50 unit radius for easier grabbing)
       for (const [id, p] of Object.entries(players)) {
         const dx = p.x - coords.x;
         const dy = p.y - coords.y;
         if (dx * dx + dy * dy <= 2500) { // 50^2
+          // Capture the exact state before we start dragging for the undo history
+          setDragStartState({ players, routes, ballCarrierId, fakeCarrierIds });
           setDraggingPlayerId(id);
-          setActiveColorId(id); // Auto-select this player's color for future drawing!
+          setActiveColorId(id); 
           return;
         }
       }
     } else if (mode === 'ball') {
-      // Assign the football to the clicked player (Toggle on/off)
       for (const [id, p] of Object.entries(players)) {
         const dx = p.x - coords.x;
         const dy = p.y - coords.y;
-        if (dx * dx + dy * dy <= 2500) { // 50^2
+        if (dx * dx + dy * dy <= 2500) { 
+          // Save history before assigning the ball
+          setHistory(prev => [...prev, { players, routes, ballCarrierId, fakeCarrierIds }]);
           setBallCarrierId(prev => prev === id ? null : id);
-          setFakeCarrierIds(prev => prev.filter(fId => fId !== id)); // Remove fake if getting real ball
+          setFakeCarrierIds(prev => prev.filter(fId => fId !== id)); 
           return;
         }
       }
     } else if (mode === 'fake') {
-      // Assign the fake football to the clicked player (Toggle on/off)
       for (const [id, p] of Object.entries(players)) {
         const dx = p.x - coords.x;
         const dy = p.y - coords.y;
-        if (dx * dx + dy * dy <= 2500) { // 50^2
+        if (dx * dx + dy * dy <= 2500) {
+          // Save history before assigning a fake
+          setHistory(prev => [...prev, { players, routes, ballCarrierId, fakeCarrierIds }]);
           setFakeCarrierIds(prev => 
             prev.includes(id) ? prev.filter(fId => fId !== id) : [...prev, id]
           );
-          if (ballCarrierId === id) setBallCarrierId(null); // Remove real ball if getting fake
+          if (ballCarrierId === id) setBallCarrierId(null); 
           return;
         }
       }
@@ -82,7 +88,6 @@ export default function App() {
       let routeColor = players[activeColorId].color;
       let routePlayerId = activeColorId;
 
-      // Find the absolute closest player to where the click started
       let minDistance = Infinity;
       let closestPlayerId = activeColorId;
 
@@ -96,8 +101,6 @@ export default function App() {
         }
       }
 
-      // If the click is reasonably close to a player (within 100 units), snap to their color.
-      // This allows you to start drawing from right behind or next to a shape without missing.
       if (minDistance <= 10000) { // 100^2
         routeColor = players[closestPlayerId].color;
         routePlayerId = closestPlayerId;
@@ -118,7 +121,6 @@ export default function App() {
     const coords = getMouseCoords(e);
 
     if (draggingPlayerId) {
-      // Update player position
       setPlayers(prev => ({
         ...prev,
         [draggingPlayerId]: {
@@ -128,7 +130,6 @@ export default function App() {
         }
       }));
     } else if (currentRoute) {
-      // Add points to the current route being drawn
       setCurrentRoute(prev => ({
         ...prev,
         points: [...prev.points, coords]
@@ -140,29 +141,57 @@ export default function App() {
     e.target.releasePointerCapture(e.pointerId);
     
     if (draggingPlayerId) {
+      // If we actually moved the player, push the dragStartState to the undo history
+      if (dragStartState) {
+        const oldP = dragStartState.players[draggingPlayerId];
+        const newP = players[draggingPlayerId];
+        if (oldP.x !== newP.x || oldP.y !== newP.y) {
+          setHistory(prev => [...prev, dragStartState]);
+        }
+      }
       setDraggingPlayerId(null);
+      setDragStartState(null);
     } else if (currentRoute) {
       // Save the route if it has more than just a starting point
       if (currentRoute.points.length > 2) {
+        // Save the state BEFORE the route was added to history
+        setHistory(prev => [...prev, { players, routes, ballCarrierId, fakeCarrierIds }]);
         setRoutes(prev => [...prev, currentRoute]);
       }
       setCurrentRoute(null);
     }
   };
 
-  const clearRoutes = () => setRoutes([]);
+  // Restores the previous state from history
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const lastState = history[history.length - 1];
+    setPlayers(lastState.players);
+    setRoutes(lastState.routes);
+    setBallCarrierId(lastState.ballCarrierId);
+    setFakeCarrierIds(lastState.fakeCarrierIds);
+    setHistory(prev => prev.slice(0, -1));
+  };
+
+  const clearRoutes = () => {
+    if (routes.length === 0) return;
+    setHistory(prev => [...prev, { players, routes, ballCarrierId, fakeCarrierIds }]);
+    setRoutes([]);
+  };
+
   const resetPlay = () => {
+    setHistory(prev => [...prev, { players, routes, ballCarrierId, fakeCarrierIds }]);
     setPlayers(INITIAL_PLAYERS);
     setRoutes([]);
     setBallCarrierId(null);
     setFakeCarrierIds([]);
   };
 
-  // Helper to render the little football icon on the ball carrier
+  // Helper to render the little football icon on the ball carrier (25% larger)
   const renderFootball = (p) => {
     if (ballCarrierId !== p.id) return null;
     return (
-      <g transform={`translate(${p.x + 18}, ${p.y - 18}) rotate(-45)`}>
+      <g transform={`translate(${p.x + 20}, ${p.y - 20}) rotate(-45) scale(1.45)`}>
         {/* Football Body */}
         <ellipse cx="0" cy="0" rx="10" ry="6" fill="#8B4513" stroke="white" strokeWidth="1.5" />
         {/* Laces */}
@@ -174,11 +203,11 @@ export default function App() {
     );
   };
 
-  // Helper to render the hollow fake football icon
+  // Helper to render the hollow fake football icon (25% larger)
   const renderFakeFootball = (p) => {
     if (!fakeCarrierIds.includes(p.id)) return null;
     return (
-      <g transform={`translate(${p.x + 18}, ${p.y - 18}) rotate(-45)`}>
+      <g transform={`translate(${p.x + 20}, ${p.y - 20}) rotate(-45) scale(1.45)`}>
         {/* Hollow Football Body */}
         <ellipse cx="0" cy="0" rx="10" ry="6" fill="none" stroke="black" strokeWidth="2" />
         {/* Laces */}
@@ -194,8 +223,6 @@ export default function App() {
   const renderPlayer = (p) => {
     const size = 20; // Base size for calculations
     
-    // Using pointerEvents: 'none' on the group ensures the SVG background perfectly catches 
-    // the mouse clicks, preventing the shapes from interfering with the drawing/dragging logic.
     if (p.shape === 'square') {
       return (
         <g key={p.id} style={{ pointerEvents: 'none' }}>
@@ -210,7 +237,6 @@ export default function App() {
     }
     
     if (p.shape === 'triangle') {
-      // Pointing upwards
       const points = `${p.x},${p.y - size - 4} ${p.x - size},${p.y + size - 2} ${p.x + size},${p.y + size - 2}`;
       return (
         <g key={p.id} style={{ pointerEvents: 'none' }}>
@@ -307,6 +333,14 @@ export default function App() {
         {/* Global Actions */}
         <div className="flex items-center gap-2">
           <button
+            onClick={handleUndo}
+            disabled={history.length === 0}
+            className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${history.length === 0 ? 'text-slate-400 bg-slate-50 cursor-not-allowed' : 'text-slate-700 bg-slate-200 hover:bg-slate-300'}`}
+            title="Undo Last Action"
+          >
+            <Undo size={16} /> Undo
+          </button>
+          <button
             onClick={clearRoutes}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
           >
@@ -365,10 +399,6 @@ export default function App() {
               </g>
             ))}
 
-            {/* Line of Scrimmage */}
-            <line x1="0" y1="400" x2="600" y2="400" stroke="#fde047" strokeWidth="4" />
-            <text x="10" y="390" fill="#fde047" fontSize="16" fontWeight="bold" className="drop-shadow-md">
-            </text>
 
             {/* --- Render Saved Routes --- */}
             {routes.map(route => (
